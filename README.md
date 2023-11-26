@@ -28,6 +28,7 @@ Therefore:
 - Small hack can be to make them const pointers. So, you are never leaking them.
 - This works because data structures always take the form of disjoint set of graphs with root nodes.
 - One more thing is that this tool works fine if we write in _java_ style. But, fails we write pure c++ style. For e.g. it cannot handle unions and embedded objects.
+- This is the main reason why I guess c++ doesn't have any garbage collector.
 
 ## How do Get Started?
 You can download the library from __gitbub__.
@@ -64,4 +65,5 @@ We can start with MLD in 4 simple steps
 ## Reference
 - Writing garbage collector [link](https://youtu.be/2JgEKEd3tw8?si=3p647qL57Fr8JiSy)
 - Garbage collector [link](https://www.udemy.com/course/memory-leak-detector/)
+- Java Memory Model [link](https://www.digitalocean.com/community/tutorials/java-jvm-memory-model-memory-management-in-java#java-memory-model-permanent-generation)
   
