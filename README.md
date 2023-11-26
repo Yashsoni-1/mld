@@ -27,6 +27,7 @@ Therefore:
 - And, if the dynamic root objects are somehow leaked, MLD cannot catch them since the MLD algorithm starts from the root objects.
 - Small hack can be to make them const pointers. So, you are never leaking them.
 - This works because data structures always take the form of disjoint set of graphs with root nodes.
+- One more thing is that this tool works fine if we write in _java_ style. But, fails we write pure c++ style. For e.g. it cannot handle unions and embedded objects.
 
 ## How do Get Started?
 You can download the library from __gitbub__.
