@@ -9,22 +9,55 @@ const char *DATA_TYPE[] = {"UINT8", "UINT16", "UINT32"
     "CHAR", "OBJ_PTR", "FLOAT",
     "DOUBLE", "OBJ_CLASS"};
 
-void print_class_rec(class_db_rec_t *class_rec)
+class_db_t::class_db_t() : count(0), head(nullptr)
 {
-    if(!class_rec) return;
+    mld_init_primitive_data_type_support();
+}
+
+class_db_t::~class_db_t()
+{
+    class_db_rec_t *temp_head = head;
+    
+    for( ;head; )
+    {
+        temp_head = head->next;
+        delete head;
+        head = temp_head;
+    }
+}
+
+class_db_rec_t::class_db_rec_t() {}
+
+object_db_t::object_db_t(class_db_t *class_db) : class_db(class_db)
+{ }
+
+object_db_t::~object_db_t()
+{
+    object_db_rec_t *temp_head = head;
+    
+    for( ;head; )
+    {
+        temp_head = head->next;
+        delete head;
+        head = temp_head;
+    }
+}
+
+void class_db_rec_t::print_class_rec() const
+{
     int j = 0;
-    field_info_t *field = NULL;
+    const field_info_t *field = nullptr;
     std::cout << '|' <<  std::setfill('-') << std::setw(55) << "|\n";
 
-    std::cout << '|' << std::setfill(' ') << std::setw(15) << std::left << class_rec->class_name << '|'
-    << "Size= " <<  std::setw(9) << class_rec->ds_size << '|' << std::right
-    << " #flds= " << std::setw(13) << class_rec->n_fields << "|\n";
+    std::cout << '|' << std::setfill(' ') << std::setw(13) << std::left << class_name << '|'
+    << "Size = " <<  std::setw(10) << ds_size << '|' << std::right
+    << " #flds = " << std::setw(12) << n_fields << "|\n";
     
     std::cout << '|' <<  std::setfill('-') << std::setw(54) << "|";
     std::cout << std::setfill('-') << std::setw(66) << "|\n";
-    for(; j<class_rec->n_fields; ++j)
+    for(; j<n_fields; ++j)
     {
-        field = &class_rec->fields[j];
+        field = &fields[j];
         std::cout << std::setfill(' ')<<  std::setw(15) << "|";
         std::cout << std::setw(3) << j << std::setw(15) << field->fname
         << "| dtype = " << std::setw(15) << DATA_TYPE[field->dtype]
@@ -39,152 +72,193 @@ void print_class_rec(class_db_rec_t *class_rec)
     }
 }
 
-void print_class_db(class_db_t *class_db)
+void class_db_t::print_class_db() const
 {
-    if(!class_db) return;
     std::cout << "Printing Class DB\n";
     int i = 0;
-    class_db_rec_t *class_rec = class_db->head;
-    std::cout << "No. of Class Registered = " << class_db->count << "\n";
+    class_db_rec_t *class_rec = head;
+    std::cout << "No. of Class Registered = " << count << "\n";
     while(class_rec)
     {
         std::cout << "Class Number: " << i++ << ' ' << class_rec << '\n';
-        print_class_rec(class_rec);
+        class_rec->print_class_rec();
         class_rec = class_rec->next;
     }
 }
 
-bool add_class_to_class_db(class_db_t *class_db,
-                           class_db_rec_t *class_rec)
+void class_db_t::REG_CLASS(const char *cl_name, const field_info_t *fields_arr,
+                           const size_t no_of_fields, const size_t class_size)
 {
-    class_db_rec_t *head = class_db->head;
+    auto rec = new class_db_rec_t;
+    strncpy(rec->class_name, cl_name, MAX_CLASS_NAME_SIZE);
+    rec->ds_size = class_size;
+    rec->n_fields = no_of_fields;
+    rec->fields = fields_arr;
+    if(add_class_to_class_db(rec)){
+        return;
+    }
+}
+
+bool class_db_t::add_class_to_class_db(class_db_rec_t *class_rec)
+{
+    class_db_rec_t *temp_head = head;
     
-    if(!head)
+    if(!temp_head)
     {
-        class_db->head = class_rec;
-        class_rec->next = NULL;
-        (class_db->count)++;
+        head = class_rec;
+        class_rec->next = nullptr;
+        (count)++;
         return true;
     }
     
     class_rec->next = head;
-    class_db->head = class_rec;
-    (class_db->count)++;
+    head = class_rec;
+    ++count;
     return true;
 }
 
 
-static class_db_rec_t* class_db_look_up(class_db_t *class_db, const char *class_name)
+class_db_rec_t* class_db_t::class_db_look_up(const char *class_name)
 {
-    class_db_rec_t *head = class_db->head;
-    if(!head) return nullptr;
+    class_db_rec_t *temp_head = head;
+    if(!temp_head) return nullptr;
     
-    for(; head; head = head->next)
-        if(strncmp(head->class_name, class_name, MAX_CLASS_NAME_SIZE) == 0)
-            return head;
-    
-    return nullptr;
-}
-
-static object_db_rec_t* object_db_look_up(object_db_t *obj_db, void *ptr)
-{
-    object_db_rec_t *head = obj_db->head;
-    if(!head) return nullptr;
-    for(; head; head = head->next)
-        if(head->ptr == ptr)
-            return head;
+    for(; temp_head; temp_head = temp_head->next)
+        if(strncmp(temp_head->class_name, class_name, MAX_CLASS_NAME_SIZE) == 0)
+            return temp_head;
     
     return nullptr;
 }
 
-static void add_object_to_object_db(object_db_t *obj_db, void *ptr, int units,
-                                    class_db_rec_t *class_rec, bool is_root = false)
+object_db_rec_t* object_db_t::object_db_look_up(const void *ptr) const
 {
-    object_db_rec_t *obj_rec = object_db_look_up(obj_db, ptr);
+    object_db_rec_t *temp_head = head;
+    if(!temp_head) return nullptr;
+    for(; temp_head; temp_head = temp_head->next)
+        if(temp_head->ptr == ptr)
+            return temp_head;
+    
+    return nullptr;
+}
+
+void object_db_t::add_object_to_object_db(void *const ptr, const size_t units,
+                                        class_db_rec_t * const class_rec, bool is_root)
+{
+    object_db_rec_t *obj_rec = object_db_look_up(ptr);
     assert(!obj_rec);
-    obj_rec = (object_db_rec_t*)calloc(1, sizeof(object_db_rec_t));
+    obj_rec = new object_db_rec_t;
     obj_rec->next = nullptr;
     obj_rec->ptr = ptr;
     obj_rec->units = units;
     obj_rec->class_rec = class_rec;
     obj_rec->is_root = is_root;
-    object_db_rec_t *head = obj_db->head;
     
-    if(!head)
+    
+    object_db_rec_t *temp_head = head;
+    
+    if(!temp_head)
     {
-        obj_db->head = obj_rec;
+        head = obj_rec;
         obj_rec->next = nullptr;
-        (obj_db->count)++;
+        (count)++;
         return;
     }
     
     obj_rec->next = head;
-    obj_db->head = obj_rec;
-    (obj_db->count)++;
+    head = obj_rec;
+    (count)++;
 }
 
-void *xnew(object_db_t *object_db, const char *class_name, int units)
+void object_db_t::remove_obj_rec_from_db(object_db_rec_t *obj_rec)
 {
-    class_db_rec_t *class_rec = class_db_look_up(object_db->class_db, class_name);
+    assert(obj_rec);
+    
+    object_db_rec_t *temp_head = head;
+    object_db_rec_t *prev{temp_head};
+    
+    for(; temp_head; temp_head = temp_head->next)
+    {
+        if(temp_head == obj_rec)
+        {
+            prev->next = temp_head->next;
+            break;
+        }
+        
+        prev = temp_head;
+    }
+        
+}
+
+void *object_db_t::xnew(const char * class_name, size_t units)
+{
+    class_db_rec_t *class_rec = class_db->class_db_look_up(class_name);
     assert(class_rec);
     void *ptr = calloc(units, class_rec->ds_size);
-    add_object_to_object_db(object_db, ptr, units, class_rec);
+    add_object_to_object_db(ptr, units, class_rec);
     return ptr;
     
 }
 
-
-
-void mld_register_root_object (object_db_t* obj_db, void *obj_ptr, char *class_name, unsigned int units)
+void object_db_t::xfree(void *ptr)
 {
-    class_db_rec_t *class_rec = class_db_look_up(obj_db->class_db, class_name);
-    assert(class_rec);
-    add_object_to_object_db(obj_db, obj_ptr, units, class_rec, true);
+    object_db_rec_t * obj_rec = object_db_look_up(ptr);
+    assert(obj_rec);
+    remove_obj_rec_from_db(obj_rec);
+    
+    free(obj_rec->ptr);
+    delete obj_rec;
 }
 
-void mld_set_dynamic_object_as_root(object_db_t *obj_db, void *object_ptr)
+
+
+void object_db_t::mld_register_root_object (void * const obj_ptr, char * class_name, const size_t units)
 {
-    object_db_rec_t *obj_rec = object_db_look_up(obj_db, object_ptr);
+    class_db_rec_t *class_rec = class_db->class_db_look_up(class_name);
+    assert(class_rec);
+    add_object_to_object_db(obj_ptr, units, class_rec, true);
+}
+
+void object_db_t::mld_set_dynamic_object_as_root(const void *object_ptr)
+{
+    object_db_rec_t *obj_rec = object_db_look_up(object_ptr);
     assert(obj_rec);
     obj_rec->is_root = true;
 }
 
 
-void print_obj_rec(object_db_rec_t *obj_rec, int i)
+void object_db_rec_t::print_obj_rec(size_t i) const
 {
-    if(!obj_rec) return;
-    
-    std::cout << std::setfill('-') << std::setw(102) << "|\n";
+    std::cout << std::setfill('-') << std::setw(110) << "|\n";
     std::cout << std::setfill(' ') << std::left << std::setw(3) << i
-    << "ptr = " << std::setw(10) << obj_rec->ptr
-    << " | next = " << std::setw(12) << obj_rec->next
-    << " | units = " << std::setw(4) << obj_rec->units
-    << " | class_name = " << std::setw(9) << obj_rec->class_rec->class_name
-    << " | is_root = " << (obj_rec->is_root ? "TRUE" : "FALSE") << "|\n";
-    std::cout << std::setfill('-') << std::setw(102)<< std::right <<  "|\n";
+    << "ptr = " << std::setw(10) << ptr
+    << " | next = " << std::setw(15) << next
+    << " | units = " << std::setw(4) << units
+    << " | class_name = " << std::setw(10) << class_rec->class_name
+    << " | is_root = " << std::setw(6) << (is_root ? "TRUE" : "FALSE") << "|\n";
+    std::cout << std::setfill('-') << std::setw(110)<< std::right <<  "|\n";
 }
 
-void print_obj_db(object_db_t *obj_db)
+void object_db_t::print_obj_db() const
 {
-    object_db_rec_t *obj_rec = obj_db->head;
-    unsigned int i = 0;
+    object_db_rec_t *obj_rec = head;
+    size_t i = 0;
     std::cout << "\nPrinting OBJECT DATABASE\n";
     for(; obj_rec; obj_rec = obj_rec->next)
-        print_obj_rec(obj_rec, i++);
+        obj_rec->print_obj_rec(i++);
 }
 
 
-static void init_mld_algorithm(object_db_t *obj_db)
+void object_db_t::init_mld_algorithm()
 {
-    object_db_rec_t *obj_rec = obj_db->head;
+    object_db_rec_t *obj_rec = head;
     for (;obj_rec; obj_rec = obj_rec->next) {
         obj_rec->is_visited = false;
     }
 }
 
-object_db_rec_t *get_next_root_object(object_db_t *obj_db, object_db_rec_t *starting_from_here)
+object_db_rec_t *object_db_t::get_next_root_object(const object_db_rec_t *starting_from_here) const
 {
-    object_db_rec_t *first = starting_from_here ? starting_from_here->next : obj_db->head;
+    object_db_rec_t *first = starting_from_here ? starting_from_here->next : head;
     
     for(; first; first = first->next)
     {
@@ -194,7 +268,7 @@ object_db_rec_t *get_next_root_object(object_db_t *obj_db, object_db_rec_t *star
     return nullptr;
 }
 
-void DFS(object_db_t *object_db, object_db_rec_t *parent_obj_rec)
+void object_db_t::DFS(object_db_rec_t *parent_obj_rec) const 
 {
     if(parent_obj_rec->is_visited)
         return;
@@ -205,7 +279,7 @@ void DFS(object_db_t *object_db, object_db_rec_t *parent_obj_rec)
     char *parent_obj_ptr = nullptr,
     *child_obj_offset = nullptr;
     void *child_object_address = nullptr;
-    field_info_t *field_info = nullptr;
+    const field_info_t *field_info = nullptr;
     
     object_db_rec_t *child_obj_rec = nullptr;
     class_db_rec_t *parent_class_rec = parent_obj_rec->class_rec;
@@ -238,69 +312,68 @@ void DFS(object_db_t *object_db, object_db_rec_t *parent_obj_rec)
                     memcpy(&child_object_address, child_obj_offset, sizeof(void *));
                     if(!child_object_address) continue;
                     
-                    child_obj_rec = object_db_look_up(object_db, child_object_address);
+                    child_obj_rec = object_db_look_up(child_object_address);
                     assert(child_obj_rec);
                     
                     if(!child_obj_rec->is_visited)
-                        DFS(object_db, child_obj_rec);
+                        DFS(child_obj_rec);
             }
         }
     }
-    
 }
 
-void run_mld_algorithm(object_db_t *obj_db)
+void object_db_t::run_mld_algorithm()
 {
-    init_mld_algorithm(obj_db);
-    object_db_rec_t *root_obj = get_next_root_object(obj_db, nullptr);
+    init_mld_algorithm();
+    object_db_rec_t *root_obj = get_next_root_object(nullptr);
     
-    for(; root_obj; root_obj = get_next_root_object(obj_db, root_obj))
+    for(; root_obj; root_obj = get_next_root_object(root_obj))
     {
         if(!(root_obj->is_visited))
         {
-            DFS(obj_db, root_obj);
+            DFS(root_obj);
         }
     }
 }
 
-void mld_dump_object_rec_detail(object_db_rec_t *obj_rec)
+void object_db_rec_t::mld_dump_object_rec_detail() const
 {
-    int n_fields = obj_rec->class_rec->n_fields;
-    field_info_t *field = nullptr;
+    size_t n_fields = class_rec->n_fields;
+    const field_info_t *field = nullptr;
     
-    int units = obj_rec->units, obj_index = 0,
+    size_t temp_units = units, obj_index = 0,
     field_index = 0;
     
-    for(; obj_index < units; ++obj_index)
+    for(; obj_index < temp_units; ++obj_index)
     {
-        char *current_object_ptr = (char *)(obj_rec->ptr) + \
-        (obj_index * obj_rec->class_rec->ds_size);
+        char *current_object_ptr = (char *)(ptr) + \
+        (obj_index * class_rec->ds_size);
         
         for(field_index = 0; field_index < n_fields; ++field_index)
         {
-            field = &(obj_rec->class_rec->fields[field_index]);
+            field = &(class_rec->fields[field_index]);
             switch (field->dtype) {
                 case UINT8:
                 case UINT16:
                 case UINT32:
-                    std::cout << obj_rec->class_rec->class_name << "[" << obj_index <<"]->"
+                    std::cout << class_rec->class_name << "[" << obj_index <<"]->"
                     << field->fname << " = " << * (int *)(current_object_ptr + field->offset) << '\n';
                     break;
                 case CHAR:
-                    std::cout << obj_rec->class_rec->class_name << "[" << obj_index <<"]->"
+                    std::cout << class_rec->class_name << "[" << obj_index <<"]->"
                     << field->fname << " = " << * (char *)(current_object_ptr + field->offset) << '\n';
                     break;
                 case FLOAT:
-                    std::cout << obj_rec->class_rec->class_name << "[" << obj_index <<"]->"
+                    std::cout << class_rec->class_name << "[" << obj_index <<"]->"
                     << field->fname << " = " << * (float *)(current_object_ptr + field->offset) << '\n';
                     break;
                 case DOUBLE:
-                    std::cout << obj_rec->class_rec->class_name << "[" << obj_index <<"]->"
+                    std::cout << class_rec->class_name << "[" << obj_index <<"]->"
                     << field->fname << " = " << * (double *)(current_object_ptr + field->offset) << '\n';
                     break;
                 case OBJ_PTR:
-                    std::cout << obj_rec->class_rec->class_name << "[" << obj_index <<"]->"
-                    << field->fname << " = " << (void *)*(int *)(current_object_ptr + field->offset) << '\n';
+                    std::cout << class_rec->class_name << "[" << obj_index <<"]->"
+                    << field->fname << " = " << (void *)*(unsigned long *)(current_object_ptr + field->offset) << '\n';
                     break;
                 case OBJ_CLASS:
                 default:
@@ -308,33 +381,30 @@ void mld_dump_object_rec_detail(object_db_rec_t *obj_rec)
             }
         }
     }
-    
 }
 
 
-void report_leaked_objects(object_db_t *obj_db)
+void object_db_t::report_leaked_objects() const
 {
     int i = 0;
-    object_db_rec_t *head = obj_db->head;
+    object_db_rec_t *temp_head = head;
     std::cout << "\nPrinting Leaked Objects\n";
     
-    for(; head; head = head->next)
+    for(; temp_head; temp_head = temp_head->next)
     {
-        if(!head->is_visited)
+        if(!temp_head->is_visited)
         {
-            print_obj_rec(head, i++);
-            mld_dump_object_rec_detail(head);
-            std::cout << "\n\n";
+            temp_head->print_obj_rec(i++);
+            temp_head->mld_dump_object_rec_detail();
         }
     }
 }
 
-void mld_init_primitive_data_type_support(class_db_t *class_db)
+void class_db_t::mld_init_primitive_data_type_support()
 {
-    REG_CLASS(class_db, "char", nullptr, 0, sizeof(char));
-    REG_CLASS(class_db, "bool", nullptr, 0, sizeof(bool));
-    REG_CLASS(class_db, "int", nullptr, 0, sizeof(int));
-    REG_CLASS(class_db, "float", nullptr, 0, sizeof(float));
-    REG_CLASS(class_db, "double", nullptr, 0, sizeof(double));
-    
+    REG_CLASS("char",  nullptr, 0, sizeof(char));
+    REG_CLASS("bool",  nullptr, 0, sizeof(bool));
+    REG_CLASS("int",   nullptr, 0, sizeof(int));
+    REG_CLASS("float", nullptr, 0, sizeof(float));
+    REG_CLASS("double",nullptr, 0, sizeof(double));
 }
