@@ -66,4 +66,6 @@ We can start with MLD in 4 simple steps
 - Writing garbage collector [link](https://youtu.be/2JgEKEd3tw8?si=3p647qL57Fr8JiSy)
 - Garbage collector [link](https://www.udemy.com/course/memory-leak-detector/)
 - Java Memory Model [link](https://www.digitalocean.com/community/tutorials/java-jvm-memory-model-memory-management-in-java#java-memory-model-permanent-generation)
+
+- Designed and implemented a memory leak detector library for C++ programs, utilizing the principle of object reachability to effectively identify and detect memory leaks. and explained 
   
